@@ -20,7 +20,34 @@ document or show you a folder.
 ## Install
 
 Needs macOS 14 or later and the Xcode Command Line Tools
-(`xcode-select --install`).
+(`xcode-select --install`). Either way below, Reveal is built from source on
+your own Mac, so there is no downloaded app for Gatekeeper to stop.
+
+Install it one way only: the two would put two copies of the same app on
+your Mac, each with its own LaunchAgent.
+
+### With Homebrew
+
+```bash
+brew install jpanico/tap/reveal
+brew services start jpanico/tap/reveal
+```
+
+Always give the full name, `jpanico/tap/reveal`: a plain `reveal` is an
+unrelated cask, the Reveal app for debugging iOS views.
+
+The first command builds Reveal, installs it in Homebrew's prefix, registers
+it with Launch Services as the handler for `reveal:`, and adds **Copy Reveal
+Link** to the Services menu. The second starts Reveal now and at every login,
+and restarts it if it ever exits, so Reveal is always running in the
+background, with no Dock icon or menu bar.
+
+After `brew upgrade jpanico/tap/reveal`, run
+`brew services restart jpanico/tap/reveal` so the running copy is the new one.
+To remove Reveal, run `brew services stop jpanico/tap/reveal`, then
+`brew uninstall jpanico/tap/reveal`.
+
+### From source
 
 ```bash
 make install
@@ -30,13 +57,14 @@ This builds `build/Reveal.app`, copies it to `~/Applications/Reveal.app`,
 registers it with Launch Services as the handler for `reveal:`, and adds
 **Copy Reveal Link** to the Services menu. It also installs a LaunchAgent,
 `~/Library/LaunchAgents/biz.panmachine.reveal.plist`, which starts Reveal now
-and at every login, and restarts it if it ever exits, so Reveal is always
-running in the background, with no Dock icon or menu bar. macOS lists it under
-System Settings → General → Login Items & Extensions → Allow in the Background.
+and at every login, and restarts it if it ever exits.
 
 `make uninstall` removes all of it, and `make stop` stops Reveal until the
 next `make install` or login. After changing the code, run `make install`
 again; it replaces the running copy.
+
+Installed either way, Reveal appears in System Settings → General → Login
+Items & Extensions, under Allow in the Background.
 
 ## Links
 
