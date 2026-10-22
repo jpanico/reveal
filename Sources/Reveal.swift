@@ -79,6 +79,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var clickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Registers this copy, which claims the reveal: scheme and the Copy
+        // Reveal Link service, wherever it is installed. Homebrew can't do it
+        // at install time: Launch Services refuses requests from its sandbox.
+        let status = LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
+        if status != noErr {
+            log.error("Launch Services registration failed: \(status)")
+        }
+        NSUpdateDynamicServices()
+
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { event in
             MainActor.assumeIsolated {
                 self.lastClick = (event.timestamp, event.modifierFlags.contains(.shift))

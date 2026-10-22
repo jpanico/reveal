@@ -36,11 +36,12 @@ brew services start jpanico/tap/reveal
 Always give the full name, `jpanico/tap/reveal`: a plain `reveal` is an
 unrelated cask, the Reveal app for debugging iOS views.
 
-The first command builds Reveal, installs it in Homebrew's prefix, registers
-it with Launch Services as the handler for `reveal:`, and adds **Copy Reveal
-Link** to the Services menu. The second starts Reveal now and at every login,
-and restarts it if it ever exits, so Reveal is always running in the
-background, with no Dock icon or menu bar.
+The first command builds Reveal and installs it in Homebrew's prefix. The
+second starts Reveal now and at every login, and restarts it if it ever
+exits, so Reveal is always running in the background, with no Dock icon or
+menu bar. Each time it starts, Reveal registers itself with Launch Services as
+the handler for `reveal:` and adds **Copy Reveal Link** to the Services menu,
+so links work once the service is running.
 
 After `brew upgrade jpanico/tap/reveal`, run
 `brew services restart jpanico/tap/reveal` so the running copy is the new one.
@@ -150,8 +151,10 @@ Files and Folders. If Finder still doesn't show it, relaunch Finder.
 
 `Info.plist` declares the `reveal` URL scheme and `LSUIElement`, so the app
 has no Dock icon or menu bar, and `NSAppSleepDisabled`, so App Nap doesn't
-slow it while it sits idle. When a link is clicked, macOS hands the URL to the
-running app. `Sources/Reveal.swift` works out whether Shift was held
+slow it while it sits idle. At launch the app registers itself with Launch
+Services (`LSRegisterURL`) and refreshes the Services menu
+(`NSUpdateDynamicServices`), so whichever copy is running handles links. When
+a link is clicked, macOS hands the URL to the running app. `Sources/Reveal.swift` works out whether Shift was held
 (`shiftForLink`, from a global monitor of left-button clicks set up at
 launch), decodes the path, and checks that the file exists. It then calls
 `NSWorkspace.activateFileViewerSelecting` to reveal the file, or, for a
