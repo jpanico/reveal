@@ -20,8 +20,12 @@
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
-	<!-- No Dock icon or menu bar: the app runs only long enough to handle a link. -->
+	<!-- No Dock icon or menu bar: the app runs unseen in the background. -->
 	<key>LSUIElement</key>
+	<true/>
+	<!-- No App Nap: an app with no windows would otherwise be slowed while idle,
+	     and a link must be handled before the user lets go of Shift. -->
+	<key>NSAppSleepDisabled</key>
 	<true/>
 	<key>CFBundleURLTypes</key>
 	<array>

@@ -28,8 +28,15 @@ make install
 
 This builds `build/Reveal.app`, copies it to `~/Applications/Reveal.app`,
 registers it with Launch Services as the handler for `reveal:`, and adds
-**Copy Reveal Link** to the Services menu. `make uninstall` removes both.
-After changing the code, run `make install` again.
+**Copy Reveal Link** to the Services menu. It also installs a LaunchAgent,
+`~/Library/LaunchAgents/biz.panmachine.reveal.plist`, which starts Reveal now
+and at every login, and restarts it if it ever exits, so Reveal is always
+running in the background, with no Dock icon or menu bar. macOS lists it under
+System Settings → General → Login Items & Extensions → Allow in the Background.
+
+`make uninstall` removes all of it, and `make stop` stops Reveal until the
+next `make install` or login. After changing the code, run `make install`
+again; it replaces the running copy.
 
 ## Links
 
@@ -65,10 +72,19 @@ Reveal; tick the box to always allow it.
 ## Opening a file
 
 Hold Shift while clicking a link to open the file in its default app; a
-folder opens in Finder. macOS hands Reveal the link with no record of the
-keys that were held, so Reveal checks whether Shift is still down when the
-link arrives, about a tenth of a second after the click. If a shift-click
-reveals the file anyway, hold Shift a moment longer.
+folder opens in Finder.
+
+macOS hands Reveal the link with no record of the keys that were held, and
+the link arrives 60–75 ms after the click, by when Shift may already be up.
+So Reveal, which is always running, watches mouse clicks in other apps and
+notes whether Shift was held during each one. When a link arrives within a
+second of a click, Reveal goes by that click; otherwise, as for a link opened
+from the keyboard or with `open`, it checks whether Shift is held at that
+moment. Of the clicks it sees, Reveal keeps only the most recent one's time
+and whether Shift was held, and never logs them.
+
+Watching clicks needs no permission. macOS asks for Input Monitoring only
+before an app watches keystrokes, and Reveal never does.
 
 Some files are only ever revealed, Shift or not, because opening them could
 run something:
@@ -105,22 +121,28 @@ Files and Folders. If Finder still doesn't show it, relaunch Finder.
 ## How it works
 
 `Info.plist` declares the `reveal` URL scheme and `LSUIElement`, so the app
-has no Dock icon or menu bar. When a link is clicked, macOS launches the app
-and hands it the URL. `Sources/Reveal.swift` reads whether Shift is held,
-decodes the path, and checks that the file exists. It then calls
+has no Dock icon or menu bar, and `NSAppSleepDisabled`, so App Nap doesn't
+slow it while it sits idle. When a link is clicked, macOS hands the URL to the
+running app. `Sources/Reveal.swift` works out whether Shift was held
+(`shiftForLink`, from a global monitor of left-button clicks set up at
+launch), decodes the path, and checks that the file exists. It then calls
 `NSWorkspace.activateFileViewerSelecting` to reveal the file, or, for a
 shift-click on a file `mayOpen` allows, `NSWorkspace.open`.
 
 `Info.plist` also declares the Copy Reveal Link service under `NSServices`.
-When it is chosen, macOS launches the app and passes the selected files on a
+When it is chosen, macOS passes the selected files to the app on a
 pasteboard; the app writes the links to the clipboard.
 
-The app quits half a second after its last request, so links opened in quick
-succession all reach the same running copy. Launched with neither a link nor
-a service request, it quits after a second.
+The app never quits on its own. The LaunchAgent, `biz.panmachine.reveal.plist`
+in this folder, runs it with `KeepAlive`, so `launchd` starts it again if it
+crashes or is killed, and with `ProcessType` `Interactive`, so it is scheduled
+like an app in use rather than throttled as a background job. If Reveal isn't
+running when a link is clicked (the agent was switched off, say), macOS starts
+it for the link, and it then stays running.
 
-The app logs each link it handles or copies, with whether Shift was held and
-how long after the last mouse click the link arrived:
+The app logs each link it handles or copies, with whether Shift was held,
+whether that came from the click or from the keys held when the link
+arrived, and how long after the last mouse click the link arrived:
 
 ```bash
 /usr/bin/log stream --info --predicate 'subsystem == "biz.panmachine.reveal"'

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The LaunchAgent that keeps Reveal running. make install copies it to
+     ~/Library/LaunchAgents, replacing @EXECUTABLE@ with the installed app's
+     executable, since launchd expands neither ~ nor $HOME. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>biz.panmachine.reveal</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@EXECUTABLE@</string>
+	</array>
+	<!-- Start at login, and again whenever the app exits for any reason. -->
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>LimitLoadToSessionType</key>
+	<string>Aqua</string>
+	<!-- Scheduled like an app the user is using, not throttled as a background job. -->
+	<key>ProcessType</key>
+	<string>Interactive</string>
+</dict>
+</plist>

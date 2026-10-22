@@ -1,10 +1,14 @@
 // Reveal: selects the file a reveal: link names in Finder.
 //
 // A link is reveal:///<absolute path>, percent-encoded, for example
-// reveal:///Users/jpanico/wip/Source%20Code.pdf. macOS launches this app
-// for the link; the app reveals the file and quits. With Shift held it opens
-// the file in its default app instead, unless the file could run something
-// (see mayOpen), which is only ever revealed.
+// reveal:///Users/jpanico/wip/Source%20Code.pdf. The app reveals the file.
+// With Shift held it opens the file in its default app instead, unless the
+// file could run something (see mayOpen), which is only ever revealed.
+//
+// The app runs in the background, with no Dock icon or menu bar, from login
+// on: a LaunchAgent starts it and restarts it if it exits (see the Makefile).
+// Being always running, it can watch clicks, and so takes Shift from the
+// click that sent a link rather than from whenever the link arrives.
 //
 // The app also provides the Copy Reveal Link service, which puts a Markdown
 // link to each file selected in Finder on the clipboard.
@@ -68,23 +72,31 @@ func mayOpen(_ file: URL) -> Bool {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var quitTask: Task<Void, Never>?
+    /// The most recent left click in any other app: when it ended (seconds
+    /// since startup, like NSEvent.timestamp) and whether Shift was held.
+    /// Nothing else about clicks is kept or logged.
+    private var lastClick: (time: TimeInterval, shift: Bool)?
+    private var clickMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        log.debug("Launched")
-        // Opened on its own (double-clicked, say), there is nothing to do.
-        quit(after: .seconds(1))
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseUp) { event in
+            MainActor.assumeIsolated {
+                self.lastClick = (event.timestamp, event.modifierFlags.contains(.shift))
+            }
+        }
+        log.info("Started; click monitor \(self.clickMonitor == nil ? "failed" : "on", privacy: .public)")
     }
 
-    /// Quits after a pause, unless another request comes first. Links opened
-    /// together arrive as one request each, so quitting at once would drop
-    /// all but the first.
-    private func quit(after delay: Duration) {
-        quitTask?.cancel()
-        quitTask = Task {
-            try? await Task.sleep(for: delay)
-            if !Task.isCancelled { NSApp.terminate(nil) }
+    /// Whether Shift was held for the link arriving now. macOS passes no
+    /// modifiers with a link, and by the time it arrives Shift may be up, so
+    /// this is Shift's state during the click that sent it, if a click ended
+    /// in the last second. Otherwise (a link opened from the keyboard, say)
+    /// it is whether Shift is held now.
+    private func shiftForLink() -> (held: Bool, from: String) {
+        if let click = lastClick, ProcessInfo.processInfo.systemUptime - click.time < 1 {
+            return (click.shift, "the click")
         }
+        return (NSEvent.modifierFlags.contains(.shift), "the keys held now")
     }
 
     /// The Copy Reveal Link service, named in Info.plist's NSServices.
@@ -94,7 +106,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ pasteboard: NSPasteboard, userData: String?,
         error: AutoreleasingUnsafeMutablePointer<NSString?>
     ) {
-        quit(after: .milliseconds(500))
         let urls = pasteboard.readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
         ) as? [URL] ?? []
@@ -115,13 +126,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        // macOS passes no modifiers with a link, so Reveal looks at the keys
-        // held now, as early as it can, before the user lets go of Shift.
-        let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+        let (shiftHeld, shiftFrom) = shiftForLink()
         let sinceClick = CGEventSource.secondsSinceLastEventType(
             .combinedSessionState, eventType: .leftMouseUp)
         log.info("""
-            Shift \(shiftHeld ? "held" : "not held", privacy: .public), \
+            Shift \(shiftHeld ? "held" : "not held", privacy: .public) \
+            (from \(shiftFrom, privacy: .public)), \
             \(sinceClick, format: .fixed(precision: 3)) s after the last click
             """)
         var toReveal: [URL] = []
@@ -161,7 +171,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !problems.isEmpty {
             report(problems)
         }
-        quit(after: .milliseconds(500))
     }
 
     private func report(_ problems: [String]) {
