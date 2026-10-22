@@ -36,5 +36,28 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Copy Reveal Link, offered for any file or folder. An NSRequiredContext,
+	     even an empty one, lets the service be enabled without a trip to
+	     System Settings. -->
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Copy Reveal Link</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>copyRevealLink</string>
+			<key>NSPortName</key>
+			<string>Reveal</string>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+			<key>NSRequiredContext</key>
+			<dict/>
+		</dict>
+	</array>
 </dict>
 </plist>

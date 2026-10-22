@@ -23,9 +23,10 @@ Needs macOS 14 or later and the Xcode Command Line Tools
 make install
 ```
 
-This builds `build/Reveal.app`, copies it to `~/Applications/Reveal.app`, and
-registers it with Launch Services as the handler for `reveal:`. `make uninstall`
-removes it. After changing the code, run `make install` again.
+This builds `build/Reveal.app`, copies it to `~/Applications/Reveal.app`,
+registers it with Launch Services as the handler for `reveal:`, and adds
+**Copy Reveal Link** to the Services menu. `make uninstall` removes both.
+After changing the code, run `make install` again.
 
 ## Links
 
@@ -55,11 +56,25 @@ A path ending in a slash names a folder; Reveal selects the folder in its
 parent. A link with no file at its path, or a malformed link, shows an alert
 saying so.
 
-Finder's **Option-Command-C** copies the selected file's path, ready to be
-encoded.
-
 In a browser, the first click on a `reveal:` link asks whether to open
 Reveal; tick the box to always allow it.
+
+## Copying a link
+
+Right-click a file or folder in Finder and choose **Services → Copy Reveal
+Link**. The clipboard then holds a Markdown link labelled with the file's
+name, encoded as above and ready to paste into Roam:
+
+```
+[a (b) #c.txt](reveal:///Users/jpanico/wip/a%20%28b%29%20%23c.txt)
+```
+
+With several files selected, it copies one link per line. The same item is in
+the menu bar under **Finder → Services**.
+
+To give it a keyboard shortcut, or if it is missing from the menu, open System
+Settings → Keyboard → Keyboard Shortcuts → Services, where it is listed under
+Files and Folders. If Finder still doesn't show it, relaunch Finder.
 
 ## How it works
 
@@ -67,9 +82,13 @@ Reveal; tick the box to always allow it.
 has no Dock icon or menu bar. When a link is clicked, macOS launches the app
 and hands it the URL. `Sources/Reveal.swift` decodes the path, checks that the
 file exists, calls `NSWorkspace.activateFileViewerSelecting`, and quits.
-Launched without a link, it quits after a second.
 
-The app logs each link it handles:
+`Info.plist` also declares the Copy Reveal Link service under `NSServices`.
+When it is chosen, macOS launches the app and passes the selected files on a
+pasteboard; the app writes the links to the clipboard and quits. Launched
+with neither a link nor a service request, it quits after a second.
+
+The app logs each link it handles or copies:
 
 ```bash
 /usr/bin/log stream --info --predicate 'subsystem == "biz.panmachine.reveal"'

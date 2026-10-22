@@ -3,6 +3,9 @@
 // A link is reveal:///<absolute path>, percent-encoded, for example
 // reveal:///Users/jpanico/wip/Source%20Code.pdf. macOS launches this app
 // for the link; the app reveals the file and quits. It never opens a file.
+//
+// The app also provides the Copy Reveal Link service, which puts a Markdown
+// link to each file selected in Finder on the clipboard.
 
 import AppKit
 import os
@@ -21,21 +24,65 @@ func filePath(from link: URL) -> String? {
     return path.hasPrefix("/") ? path : nil
 }
 
+/// The reveal: link for an absolute path: the inverse of filePath(from:).
+///
+/// Everything outside the URL path characters is percent-encoded, and so are
+/// ( and ), which a URL allows but which end a Markdown link.
+func revealLink(for path: String) -> String {
+    var allowed = CharacterSet.urlPathAllowed
+    allowed.remove(charactersIn: "()")
+    return "reveal://" + path.addingPercentEncoding(withAllowedCharacters: allowed)!
+}
+
+/// A Markdown link to a file, labelled with the file's name.
+func markdownLink(to file: URL) -> String {
+    "[\(file.lastPathComponent)](\(revealLink(for: file.path(percentEncoded: false))))"
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var handledLink = false
+    private var handledRequest = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.debug("Launched")
         // Opened on its own (double-clicked, say), there is nothing to do.
         Task {
             try? await Task.sleep(for: .seconds(1))
-            if !handledLink { NSApp.terminate(nil) }
+            if !handledRequest { NSApp.terminate(nil) }
         }
     }
 
+    /// The Copy Reveal Link service, named in Info.plist's NSServices.
+    /// Selecting several files copies one link per line.
+    @objc(copyRevealLink:userData:error:)
+    func copyRevealLink(
+        _ pasteboard: NSPasteboard, userData: String?,
+        error: AutoreleasingUnsafeMutablePointer<NSString?>
+    ) {
+        handledRequest = true
+        // Quits after this method returns, once the request is answered.
+        Task { NSApp.terminate(nil) }
+        let urls = pasteboard.readObjects(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL] ?? []
+        guard !urls.isEmpty else {
+            log.error("Copy Reveal Link received no files")
+            error.pointee = "No files were selected."
+            return
+        }
+        // Finder may pass file reference URLs (file:///.file/id=…),
+        // which name a file by its ID rather than its path.
+        let files = urls.map { ($0 as NSURL).filePathURL ?? $0 }
+        for file in files {
+            log.info("Copying a link to \(file.path(percentEncoded: false), privacy: .public)")
+        }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(
+            files.map(markdownLink(to:)).joined(separator: "\n"), forType: .string)
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
-        handledLink = true
+        handledRequest = true
         var files: [URL] = []
         var problems: [String] = []
         for link in urls {
@@ -76,7 +123,8 @@ enum Reveal {
     static func main() {
         let delegate = AppDelegate()
         NSApplication.shared.delegate = delegate
-        // The application holds its delegate weakly.
+        NSApplication.shared.servicesProvider = delegate
+        // The application retains neither its delegate nor its services provider.
         withExtendedLifetime(delegate) {
             NSApplication.shared.run()
         }
