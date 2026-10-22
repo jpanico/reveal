@@ -2,12 +2,15 @@
 //
 // A link is reveal:///<absolute path>, percent-encoded, for example
 // reveal:///Users/jpanico/wip/Source%20Code.pdf. macOS launches this app
-// for the link; the app reveals the file and quits. It never opens a file.
+// for the link; the app reveals the file and quits. With Shift held it opens
+// the file in its default app instead, unless the file could run something
+// (see mayOpen), which is only ever revealed.
 //
 // The app also provides the Copy Reveal Link service, which puts a Markdown
 // link to each file selected in Finder on the clipboard.
 
 import AppKit
+import UniformTypeIdentifiers
 import os
 
 let log = Logger(subsystem: "biz.panmachine.reveal", category: "reveal")
@@ -39,16 +42,48 @@ func markdownLink(to file: URL) -> String {
     "[\(file.lastPathComponent)](\(revealLink(for: file.path(percentEncoded: false))))"
 }
 
+/// Types a shift-click reveals instead of opening, so that a link from
+/// anywhere can open a document but never run anything.
+let revealedOnlyTypes: Set<String> = [
+    UTType.application.identifier,
+    UTType.executable.identifier,
+    UTType.script.identifier,      // including Terminal's .command files
+    UTType.bundle.identifier,      // plug-ins, extensions, pref panes, savers, ...
+    "com.apple.terminal.settings",  // can run a command when opened
+    "com.apple.internet-location",  // .webloc, .fileloc: opens what it points to
+]
+
+/// Whether a shift-click may open the file rather than reveal it.
+/// Folders and document packages (.pages, .rtfd) may be opened; so may any
+/// file whose type isn't revealed-only, unless it is marked executable.
+func mayOpen(_ file: URL) -> Bool {
+    guard let values = try? file.resourceValues(
+              forKeys: [.contentTypeKey, .isDirectoryKey, .isExecutableKey]),
+          let type = values.contentType
+    else { return false }
+    if values.isDirectory != true && values.isExecutable == true { return false }
+    let identifiers = Set([type.identifier] + type.supertypes.map(\.identifier))
+    return identifiers.isDisjoint(with: revealedOnlyTypes)
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private var handledRequest = false
+    private var quitTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         log.debug("Launched")
         // Opened on its own (double-clicked, say), there is nothing to do.
-        Task {
-            try? await Task.sleep(for: .seconds(1))
-            if !handledRequest { NSApp.terminate(nil) }
+        quit(after: .seconds(1))
+    }
+
+    /// Quits after a pause, unless another request comes first. Links opened
+    /// together arrive as one request each, so quitting at once would drop
+    /// all but the first.
+    private func quit(after delay: Duration) {
+        quitTask?.cancel()
+        quitTask = Task {
+            try? await Task.sleep(for: delay)
+            if !Task.isCancelled { NSApp.terminate(nil) }
         }
     }
 
@@ -59,9 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ pasteboard: NSPasteboard, userData: String?,
         error: AutoreleasingUnsafeMutablePointer<NSString?>
     ) {
-        handledRequest = true
-        // Quits after this method returns, once the request is answered.
-        Task { NSApp.terminate(nil) }
+        quit(after: .milliseconds(500))
         let urls = pasteboard.readObjects(
             forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]
         ) as? [URL] ?? []
@@ -82,8 +115,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        handledRequest = true
-        var files: [URL] = []
+        // macOS passes no modifiers with a link, so Reveal looks at the keys
+        // held now, as early as it can, before the user lets go of Shift.
+        let shiftHeld = NSEvent.modifierFlags.contains(.shift)
+        let sinceClick = CGEventSource.secondsSinceLastEventType(
+            .combinedSessionState, eventType: .leftMouseUp)
+        log.info("""
+            Shift \(shiftHeld ? "held" : "not held", privacy: .public), \
+            \(sinceClick, format: .fixed(precision: 3)) s after the last click
+            """)
+        var toReveal: [URL] = []
+        var toOpen: [URL] = []
         var problems: [String] = []
         for link in urls {
             guard let path = filePath(from: link) else {
@@ -96,22 +138,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 problems.append("There is no file at \(path).")
                 continue
             }
-            log.info("Revealing \(path, privacy: .public)")
-            files.append(URL(filePath: path))
+            let file = URL(filePath: path)
+            if !shiftHeld {
+                log.info("Revealing \(path, privacy: .public)")
+                toReveal.append(file)
+            } else if mayOpen(file) {
+                log.info("Opening \(path, privacy: .public)")
+                toOpen.append(file)
+            } else {
+                log.info("Revealing \(path, privacy: .public): a shift-click doesn’t open this type")
+                toReveal.append(file)
+            }
         }
-        if !files.isEmpty {
-            NSWorkspace.shared.activateFileViewerSelecting(files)
+        for file in toOpen where !NSWorkspace.shared.open(file) {
+            let path = file.path(percentEncoded: false)
+            log.error("Could not open \(path, privacy: .public)")
+            problems.append("\(path) could not be opened.")
+        }
+        if !toReveal.isEmpty {
+            NSWorkspace.shared.activateFileViewerSelecting(toReveal)
         }
         if !problems.isEmpty {
             report(problems)
         }
-        NSApp.terminate(nil)
+        quit(after: .milliseconds(500))
     }
 
     private func report(_ problems: [String]) {
         NSApp.activate()
         let alert = NSAlert()
-        alert.messageText = "Can’t reveal the file"
+        alert.messageText = "Can’t follow the link"
         alert.informativeText = problems.joined(separator: "\n\n")
         alert.runModal()
     }

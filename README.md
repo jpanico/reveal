@@ -11,8 +11,11 @@ brings Finder to the front with that file selected, as Finder's own
 `file://` link opens the file instead, and a link to a folder opens the
 folder without selecting anything.
 
-Reveal only ever selects a file in Finder. It never opens or runs one, so the
-worst a bad link can do is show you a folder.
+Shift-clicking the link opens the file in its default app instead, as
+double-clicking it in Finder would. Shift-click never runs anything: apps,
+scripts, and other files that could run code are only ever revealed (see
+[Opening a file](#opening-a-file)). So the worst a bad link can do is open a
+document or show you a folder.
 
 ## Install
 
@@ -59,6 +62,27 @@ saying so.
 In a browser, the first click on a `reveal:` link asks whether to open
 Reveal; tick the box to always allow it.
 
+## Opening a file
+
+Hold Shift while clicking a link to open the file in its default app; a
+folder opens in Finder. macOS hands Reveal the link with no record of the
+keys that were held, so Reveal checks whether Shift is still down when the
+link arrives, about a tenth of a second after the click. If a shift-click
+reveals the file anyway, hold Shift a moment longer.
+
+Some files are only ever revealed, Shift or not, because opening them could
+run something:
+
+- apps, scripts (including Terminal's `.command` files), and executables
+- bundles: app extensions, plug-ins, kernel extensions, preference panes,
+  screen savers, and the like
+- Terminal settings files (`.terminal`), which can run a command
+- internet location files (`.webloc`, `.fileloc`, `.inetloc`), which open
+  whatever they point to
+- any file marked executable
+
+Document packages, such as `.pages` and `.rtfd` files, open normally.
+
 ## Copying a link
 
 Right-click a file or folder in Finder and choose **Copy Reveal Link**, the
@@ -82,15 +106,21 @@ Files and Folders. If Finder still doesn't show it, relaunch Finder.
 
 `Info.plist` declares the `reveal` URL scheme and `LSUIElement`, so the app
 has no Dock icon or menu bar. When a link is clicked, macOS launches the app
-and hands it the URL. `Sources/Reveal.swift` decodes the path, checks that the
-file exists, calls `NSWorkspace.activateFileViewerSelecting`, and quits.
+and hands it the URL. `Sources/Reveal.swift` reads whether Shift is held,
+decodes the path, and checks that the file exists. It then calls
+`NSWorkspace.activateFileViewerSelecting` to reveal the file, or, for a
+shift-click on a file `mayOpen` allows, `NSWorkspace.open`.
 
 `Info.plist` also declares the Copy Reveal Link service under `NSServices`.
 When it is chosen, macOS launches the app and passes the selected files on a
-pasteboard; the app writes the links to the clipboard and quits. Launched
-with neither a link nor a service request, it quits after a second.
+pasteboard; the app writes the links to the clipboard.
 
-The app logs each link it handles or copies:
+The app quits half a second after its last request, so links opened in quick
+succession all reach the same running copy. Launched with neither a link nor
+a service request, it quits after a second.
+
+The app logs each link it handles or copies, with whether Shift was held and
+how long after the last mouse click the link arrived:
 
 ```bash
 /usr/bin/log stream --info --predicate 'subsystem == "biz.panmachine.reveal"'
