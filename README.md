@@ -76,3 +76,7 @@ The app logs each link it handles:
 ```
 
 (The full path matters in zsh, whose builtin `log` shadows the system's.)
+
+## License
+
+MIT
