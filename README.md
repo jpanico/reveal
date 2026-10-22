@@ -61,9 +61,11 @@ Reveal; tick the box to always allow it.
 
 ## Copying a link
 
-Right-click a file or folder in Finder and choose **Services → Copy Reveal
-Link**. The clipboard then holds a Markdown link labelled with the file's
-name, encoded as above and ready to paste into Roam:
+Right-click a file or folder in Finder and choose **Copy Reveal Link**, the
+last item in the menu. (With many services installed, Finder gathers them into
+a Services submenu at the bottom instead.) The clipboard then holds a Markdown
+link labelled with the file's name, encoded as above and ready to paste into
+Roam:
 
 ```
 [a (b) #c.txt](reveal:///Users/jpanico/wip/a%20%28b%29%20%23c.txt)
