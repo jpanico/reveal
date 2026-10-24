@@ -3,7 +3,7 @@
 A tiny macOS app that handles `reveal:` links. Clicking
 
 ```
-reveal:///Users/jpanico/wip/Source_Code_For_Humans.book.pdf
+reveal:///Users/jpanico/wip/report.pdf
 ```
 
 brings Finder to the front with that file selected, as Finder's own
@@ -88,7 +88,7 @@ space or a closing parenthesis, so at least these characters must be encoded:
 In Roam, a labelled link:
 
 ```
-[Stored-Program Computer.svg](reveal:///Users/jpanico/Documents/github/scfh-book/design/diagrams/Stored-Program%20Computer.svg)
+[Annual Report.pdf](reveal:///Users/jpanico/wip/Annual%20Report.pdf)
 ```
 
 A path ending in a slash names a folder; Reveal selects the folder in its

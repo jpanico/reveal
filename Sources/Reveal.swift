@@ -1,7 +1,7 @@
 // Reveal: selects the file a reveal: link names in Finder.
 //
 // A link is reveal:///<absolute path>, percent-encoded, for example
-// reveal:///Users/jpanico/wip/Source%20Code.pdf. The app reveals the file.
+// reveal:///Users/jpanico/wip/Annual%20Report.pdf. The app reveals the file.
 // With Shift held it opens the file in its default app instead, unless the
 // file could run something (see mayOpen), which is only ever revealed.
 //
